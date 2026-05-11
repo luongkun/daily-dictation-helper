@@ -37,10 +37,20 @@
     return Array.from(root.querySelectorAll(sel));
   }
 
+  let _cachedAnswers = [];
+  let _answerCacheDirty = true;
+
   function readAnswers() {
-    return $all(SELECTORS.transcriptItems)
+    if (!_answerCacheDirty && _cachedAnswers.length > 0) return _cachedAnswers;
+    _cachedAnswers = $all(SELECTORS.transcriptItems)
       .map((el) => (el.innerText || el.textContent || "").trim())
       .filter((t) => t.length > 0);
+    if (_cachedAnswers.length > 0) _answerCacheDirty = false;
+    return _cachedAnswers;
+  }
+
+  function invalidateAnswerCache() {
+    _answerCacheDirty = true;
   }
 
   function getCounterButton() {
@@ -293,22 +303,29 @@
     }
   }
 
+  let _updatingPanel = false;
+
   function updatePanel() {
-    if (!panelEl) return;
-    const cur = getCurrent();
-    const answers = readAnswers();
-    const status = panelEl.querySelector('[data-role="status"]');
-    const autoBtn = panelEl.querySelector('[data-role="auto"]');
-    if (status) {
-      if (cur) {
-        status.textContent = `Câu ${cur.index + 1} / ${cur.total} · ${answers.length} đáp án sẵn`;
-      } else {
-        status.textContent = "Mở một bài Listen & Type để bắt đầu";
+    if (!panelEl || _updatingPanel) return;
+    _updatingPanel = true;
+    try {
+      const cur = getCurrent();
+      const answers = readAnswers();
+      const status = panelEl.querySelector('[data-role="status"]');
+      const autoBtn = panelEl.querySelector('[data-role="auto"]');
+      if (status) {
+        const newText = cur
+          ? `Câu ${cur.index + 1} / ${cur.total} · ${answers.length} đáp án sẵn`
+          : "Mở một bài Listen & Type để bắt đầu";
+        if (status.textContent !== newText) status.textContent = newText;
       }
-    }
-    if (autoBtn) {
-      autoBtn.textContent = STATE.autoRunning ? "■ Dừng auto" : "▶ Auto chạy hết bài";
-      autoBtn.classList.toggle("ddh-running", STATE.autoRunning);
+      if (autoBtn) {
+        const newLabel = STATE.autoRunning ? "■ Dừng auto" : "▶ Auto chạy hết bài";
+        if (autoBtn.textContent !== newLabel) autoBtn.textContent = newLabel;
+        autoBtn.classList.toggle("ddh-running", STATE.autoRunning);
+      }
+    } finally {
+      _updatingPanel = false;
     }
   }
 
@@ -438,13 +455,26 @@
     }
   });
 
-  // ---------- DOM observer to update status ----------
+  // ---------- DOM observer to update status (debounced) ----------
 
   function startObserver() {
-    const obs = new MutationObserver(() => {
-      if (panelEl) updatePanel();
+    let debounceTimer = null;
+    const debouncedUpdate = () => {
+      if (debounceTimer) return;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (panelEl) updatePanel();
+      }, 500);
+    };
+    const obs = new MutationObserver((mutations) => {
+      // Skip mutations from our own panel to avoid feedback loops.
+      const isOwnMutation = mutations.every(
+        (m) => panelEl && (panelEl.contains(m.target) || m.target === panelEl),
+      );
+      if (isOwnMutation) return;
+      debouncedUpdate();
     });
-    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    obs.observe(document.body, { childList: true, subtree: true });
   }
 
   // ---------- init ----------
@@ -453,5 +483,11 @@
     await loadSettings();
     if (STATE.enabled) ensurePanel();
     startObserver();
+
+    // Invalidate answer cache when user switches transcript tabs.
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest('a[href="#"], [role="tab"]');
+      if (link) invalidateAnswerCache();
+    });
   })();
 })();
