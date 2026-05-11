@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Daily Dictation Helper",
   "short_name": "DD Helper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Tự động điền đáp án bài luyện nghe (Listen & Type) và tự chọn đáp án đúng cho bài Listen & Select trên dailydictation.com.",
   "author": "luongkun",
   "icons": {

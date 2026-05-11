@@ -16,6 +16,11 @@
     useEscapeShortcut: true,
     pressCheckTwice: true,
     panelMinimized: false,
+    // Trang dailydictation.com chỉ "tính" câu làm được khi audio đã được phát
+    // (trang lắng nghe event play/ended trên <audio>). Nếu bỏ qua bước này
+    // thì dù điền đúng, kết quả / progress vẫn không được cộng. Mặc định bật.
+    playAudioFirst: true,
+    audioPlaybackRate: 8,
   };
 
   const SELECTORS = {
@@ -83,6 +88,137 @@
   function isSelectMode() {
     if (/\/listen-and-select(\/|$|\?)/.test(location.pathname + location.search)) return true;
     return !!$(SELECTORS.selectOption);
+  }
+
+  // ---------- audio: ensure the page marks the sentence as "listened" ----------
+
+  // Trang dailydictation.com chỉ tính điểm / progress cho câu mà user đã bấm
+  // Play ít nhất một lần. Nếu auto-fill mà không play thì kết quả không được
+  // cộng. Để fix, ta tự phát audio của câu hiện tại với tốc độ cao rồi đợi
+  // event "ended" (hoặc timeout) trước khi điền đáp án.
+
+  const _playedKeyFor = (idx) => `${location.pathname}#${idx}`;
+  const _playedSet = new Set();
+
+  function getActiveAudio() {
+    const audios = $all("audio");
+    if (audios.length === 0) return null;
+    // Ưu tiên audio có src và đang hiển thị trên trang.
+    let best = null;
+    for (const a of audios) {
+      if (!a.src && !a.currentSrc) continue;
+      if (!best) best = a;
+      // Audio của câu hiện tại sẽ có duration > 0 và thường ở gần đầu DOM.
+      if (a.duration && a.duration > 0) {
+        best = a;
+        break;
+      }
+    }
+    return best || audios[0];
+  }
+
+  function clickPlayButton() {
+    // Fallback khi không tìm thấy <audio> trực tiếp (ví dụ trang dùng custom
+    // player). Thử các nút quen thuộc: .bi-play, #btn-play, nút có text "Play".
+    const byClass = $all("button, a").find(
+      (b) => /(^|\s)bi-play(-fill)?(\s|$)/.test(b.className) && !b.disabled,
+    );
+    if (byClass) {
+      byClass.click();
+      return true;
+    }
+    const byId = $("#btn-play");
+    if (byId && !byId.disabled) {
+      byId.click();
+      return true;
+    }
+    const byText = $all("button").find(
+      (b) => /^\s*play\s*$/i.test(b.innerText || "") && !b.disabled,
+    );
+    if (byText) {
+      byText.click();
+      return true;
+    }
+    return false;
+  }
+
+  async function ensureAudioListened() {
+    if (!STATE.playAudioFirst) return true;
+
+    const cur = getCurrent();
+    const idx = cur ? cur.index : -1;
+    const key = _playedKeyFor(idx);
+    if (idx >= 0 && _playedSet.has(key)) return true;
+
+    const audio = getActiveAudio();
+    if (!audio) {
+      // Không tìm thấy <audio>, thử nút Play như một fallback nhẹ.
+      const clicked = clickPlayButton();
+      if (!clicked) return true; // không có gì để phát -> khỏi chặn flow
+      await sleep(300);
+      if (idx >= 0) _playedSet.add(key);
+      return true;
+    }
+
+    try {
+      // Lưu trạng thái gốc để khôi phục.
+      const prevMuted = audio.muted;
+      const prevRate = audio.playbackRate;
+      const prevTime = audio.currentTime;
+
+      const rate = Math.max(1, Math.min(16, STATE.audioPlaybackRate || 1));
+      try {
+        audio.muted = true;
+        audio.playbackRate = rate;
+        audio.currentTime = 0;
+      } catch (_e) {
+        // Một số browser không cho set currentTime trước khi metadata sẵn sàng.
+      }
+
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        // Nếu autoplay bị chặn (hiếm vì user đã tương tác), fallback click Play.
+        await playPromise.catch(() => {
+          clickPlayButton();
+        });
+      }
+
+      // Đợi đến khi audio kết thúc, hoặc timeout an toàn.
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          audio.removeEventListener("ended", finish);
+          audio.removeEventListener("pause", onPause);
+          clearTimeout(timer);
+          resolve();
+        };
+        const onPause = () => {
+          // Một số trang pause audio ngay khi ended; coi như xong.
+          if (audio.ended || audio.currentTime >= (audio.duration || 0) - 0.05) finish();
+        };
+        audio.addEventListener("ended", finish, { once: true });
+        audio.addEventListener("pause", onPause);
+        // Timeout: duration/rate + buffer, tối thiểu 600ms, tối đa 15s.
+        const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 10;
+        const timeoutMs = Math.max(600, Math.min(15000, (dur / rate) * 1000 + 500));
+        const timer = setTimeout(finish, timeoutMs);
+      });
+
+      // Khôi phục lại các thuộc tính để không phá UX khi người dùng nghe lại.
+      try {
+        audio.pause();
+        audio.muted = prevMuted;
+        audio.playbackRate = prevRate;
+        audio.currentTime = prevTime;
+      } catch (_e) {}
+    } catch (_e) {
+      // Nuốt lỗi — không chặn flow điền.
+    }
+
+    if (idx >= 0) _playedSet.add(key);
+    return true;
   }
 
   // ---------- listen-and-select helpers ----------
@@ -211,6 +347,7 @@
 
   async function fillCurrent() {
     if (isSelectMode()) {
+      await ensureAudioListened();
       return await solveSelectQuestion();
     }
     const input = $(SELECTORS.input);
@@ -218,6 +355,10 @@
       toast("Không tìm thấy ô nhập (đang ở tab Dictation chưa?)", "error");
       return false;
     }
+
+    // Phát audio trước để trang đánh dấu câu đã được nghe (điều kiện để
+    // trang cộng kết quả / progress). Bỏ qua nếu user tắt tuỳ chọn này.
+    await ensureAudioListened();
 
     // Ưu tiên: focus input + nhấn Esc để trang tự điền.
     if (STATE.useEscapeShortcut) {
@@ -263,6 +404,7 @@
 
   async function fillAndCheck() {
     if (isSelectMode()) {
+      await ensureAudioListened();
       // solveSelectQuestion already clicks Check as part of trying options.
       return await solveSelectQuestion();
     }
@@ -351,6 +493,7 @@
       }
       lastIndex = cur.index;
 
+      await ensureAudioListened();
       const ok = await solveSelectQuestion();
       if (!ok) break;
 
@@ -417,6 +560,14 @@
         <div class="ddh-row ddh-controls">
           <label class="ddh-checkbox"><input type="checkbox" data-role="use-esc" /> Dùng phím Esc (nhanh nhất)</label>
         </div>
+        <div class="ddh-row ddh-controls">
+          <label class="ddh-checkbox"><input type="checkbox" data-role="play-audio" /> Phát audio trước (để tính điểm)</label>
+        </div>
+        <div class="ddh-row ddh-controls">
+          <label class="ddh-label">Tốc độ audio</label>
+          <input class="ddh-range" type="range" min="1" max="16" step="1" data-role="audio-rate" />
+          <span class="ddh-val" data-role="audio-rate-val">8x</span>
+        </div>
         <div class="ddh-hint">Phím tắt: <b>Ctrl+Shift+Enter</b> = Điền · <b>Ctrl+Shift+A</b> = Auto · <b>Ctrl+Shift+H</b> = Ẩn panel</div>
       </div>
     `;
@@ -468,6 +619,23 @@
     useEsc.checked = STATE.useEscapeShortcut;
     useEsc.addEventListener("change", () => {
       STATE.useEscapeShortcut = useEsc.checked;
+      saveSettings();
+    });
+
+    const playAudio = panelEl.querySelector('[data-role="play-audio"]');
+    playAudio.checked = STATE.playAudioFirst;
+    playAudio.addEventListener("change", () => {
+      STATE.playAudioFirst = playAudio.checked;
+      saveSettings();
+    });
+
+    const audioRate = panelEl.querySelector('[data-role="audio-rate"]');
+    const audioRateVal = panelEl.querySelector('[data-role="audio-rate-val"]');
+    audioRate.value = STATE.audioPlaybackRate;
+    audioRateVal.textContent = `${STATE.audioPlaybackRate}x`;
+    audioRate.addEventListener("input", () => {
+      STATE.audioPlaybackRate = parseInt(audioRate.value, 10);
+      audioRateVal.textContent = `${STATE.audioPlaybackRate}x`;
       saveSettings();
     });
 
@@ -599,6 +767,8 @@
           autoTypingMs: 0,
           useEscapeShortcut: true,
           panelMinimized: false,
+          playAudioFirst: true,
+          audioPlaybackRate: 8,
         },
         (vals) => {
           STATE.enabled = vals.enabled;
@@ -606,6 +776,8 @@
           STATE.autoTypingMs = vals.autoTypingMs;
           STATE.useEscapeShortcut = vals.useEscapeShortcut;
           STATE.panelMinimized = vals.panelMinimized;
+          STATE.playAudioFirst = vals.playAudioFirst;
+          STATE.audioPlaybackRate = vals.audioPlaybackRate;
           resolve();
         },
       );
@@ -619,6 +791,8 @@
       autoTypingMs: STATE.autoTypingMs,
       useEscapeShortcut: STATE.useEscapeShortcut,
       panelMinimized: STATE.panelMinimized,
+      playAudioFirst: STATE.playAudioFirst,
+      audioPlaybackRate: STATE.audioPlaybackRate,
     });
   }
 
@@ -632,6 +806,8 @@
     if ("autoTypingMs" in changes) STATE.autoTypingMs = changes.autoTypingMs.newValue;
     if ("useEscapeShortcut" in changes) STATE.useEscapeShortcut = changes.useEscapeShortcut.newValue;
     if ("panelMinimized" in changes) STATE.panelMinimized = changes.panelMinimized.newValue;
+    if ("playAudioFirst" in changes) STATE.playAudioFirst = changes.playAudioFirst.newValue;
+    if ("audioPlaybackRate" in changes) STATE.audioPlaybackRate = changes.audioPlaybackRate.newValue;
     if (needsRefresh) {
       if (STATE.enabled) {
         ensurePanel();
