@@ -1,13 +1,10 @@
-// Daily Dictation Helper - popup
+// Trợ lí của Lương - popup
 
 const DEFAULTS = {
   enabled: true,
   autoDelayMs: 120,
   autoTypingMs: 0,
-  useEscapeShortcut: true,
   panelMinimized: false,
-  playAudioFirst: true,
-  audioPlaybackRate: 8,
 };
 
 const el = {
@@ -20,10 +17,6 @@ const el = {
   delayVal: document.getElementById("delay-val"),
   typing: document.getElementById("typing"),
   typingVal: document.getElementById("typing-val"),
-  useEsc: document.getElementById("use-esc"),
-  playAudio: document.getElementById("play-audio"),
-  audioRate: document.getElementById("audio-rate"),
-  audioRateVal: document.getElementById("audio-rate-val"),
 };
 
 let activeTabId = null;
@@ -115,12 +108,6 @@ async function init() {
   el.delayVal.textContent = fmtDelay(stored.autoDelayMs);
   el.typing.value = stored.autoTypingMs;
   el.typingVal.textContent = fmtTyping(stored.autoTypingMs);
-  if (el.useEsc) el.useEsc.checked = !!stored.useEscapeShortcut;
-  if (el.playAudio) el.playAudio.checked = !!stored.playAudioFirst;
-  if (el.audioRate) {
-    el.audioRate.value = stored.audioPlaybackRate;
-    el.audioRateVal.textContent = `${stored.audioPlaybackRate}x`;
-  }
 
   updateStatusText();
   updateActionButtons();
@@ -148,26 +135,6 @@ el.typing.addEventListener("input", () => {
   el.typingVal.textContent = fmtTyping(v);
   chrome.storage.sync.set({ autoTypingMs: v });
 });
-
-if (el.useEsc) {
-  el.useEsc.addEventListener("change", () => {
-    chrome.storage.sync.set({ useEscapeShortcut: el.useEsc.checked });
-  });
-}
-
-if (el.playAudio) {
-  el.playAudio.addEventListener("change", () => {
-    chrome.storage.sync.set({ playAudioFirst: el.playAudio.checked });
-  });
-}
-
-if (el.audioRate) {
-  el.audioRate.addEventListener("input", () => {
-    const v = parseInt(el.audioRate.value, 10);
-    el.audioRateVal.textContent = `${v}x`;
-    chrome.storage.sync.set({ audioPlaybackRate: v });
-  });
-}
 
 el.fill.addEventListener("click", async () => {
   await sendToTab("fill");

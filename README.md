@@ -1,4 +1,4 @@
-# Daily Dictation Helper
+# Trợ lí của Lương
 
 Chrome/Edge extension giúp tự động làm bài luyện nghe trên [dailydictation.com](https://dailydictation.com).
 
@@ -17,8 +17,6 @@ Không cần API key, không cần micro, không cần speech-to-text.
 - **Điền + Check**: gõ đáp án rồi bấm Check ngay; với bài Select thì tự thử lần lượt cho đến khi ra đáp án đúng.
 - **Auto chạy hết bài**: tự động làm hết toàn bộ câu trong bài, có chỉnh delay giữa câu.
   - Với **Listen & Select**: extension click từng lựa chọn, bấm Check, nếu sai thì tự chuyển sang đáp án còn lại rồi bấm Next.
-- **Tự phát audio trước khi điền (mặc định bật)**: dailydictation.com chỉ ghi nhận kết quả / progress cho câu đã được phát audio ít nhất 1 lần. Extension sẽ phát audio với tốc độ cao (mặc định 8x, muted) rồi mới điền — nhờ vậy kết quả được cộng vào bảng điểm. Có thể tắt hoặc đổi tốc độ trong panel / popup.
-- **Dùng phím Esc của trang (mặc định bật, chỉ cho Listen & Type)**: tận dụng luôn shortcut sẵn có của dailydictation.com (focus ô input → nhấn Esc → trang tự điền đáp án). Cách này nhanh nhất và không cần đọc Full transcript trước. Tắt checkbox này nếu muốn extension điền thủ công từ tab Full transcript.
 - **Chỉnh tốc độ gõ** (Listen & Type): gõ từng ký tự để trông tự nhiên (0–180 ms/ký tự) — mặc định 0ms (điền liền).
 - **Phím tắt**:
   - `Ctrl+Shift+Enter` → Điền / chọn câu hiện tại
@@ -35,7 +33,7 @@ Không cần API key, không cần micro, không cần speech-to-text.
 4. Mở một bài trên dailydictation.com. Ví dụ:
    - Listen & Type: <https://dailydictation.com/exercises/numbers/phone-numbers.344/listen-and-type>
    - Listen & Select: <https://dailydictation.com/exercises/english-pronunciation/i-vs-ee-it-vs-eat.684/listen-and-select>
-5. Panel "DD Helper" xuất hiện ở góc dưới bên phải. Bấm **Điền + Check** hoặc **Auto chạy hết bài**.
+5. Panel "Trợ lí của Lương" xuất hiện ở góc dưới bên phải. Bấm **Điền + Check** hoặc **Auto chạy hết bài**.
 
 > Mẹo: Nếu mới mở bài ra mà panel báo "0 đáp án sẵn", hãy bấm sang tab **Full transcript** một lần rồi quay lại tab **Dictation**. Sau đó extension sẽ thấy đầy đủ 30 câu.
 

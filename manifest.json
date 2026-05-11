@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Daily Dictation Helper",
-  "short_name": "DD Helper",
-  "version": "1.2.0",
+  "name": "Trợ lí của Lương",
+  "short_name": "Trợ lí của Lương",
+  "version": "1.2.1",
   "description": "Tự động điền đáp án bài luyện nghe (Listen & Type) và tự chọn đáp án đúng cho bài Listen & Select trên dailydictation.com.",
   "author": "luongkun",
   "icons": {
@@ -12,7 +12,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Daily Dictation Helper",
+    "default_title": "Trợ lí của Lương",
     "default_popup": "src/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
