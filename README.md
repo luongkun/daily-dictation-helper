@@ -1,20 +1,26 @@
 # Daily Dictation Helper
 
-Chrome/Edge extension giúp tự động điền đáp án bài luyện nghe trên [dailydictation.com](https://dailydictation.com).
+Chrome/Edge extension giúp tự động làm bài luyện nghe trên [dailydictation.com](https://dailydictation.com).
 
-Extension đọc thẳng nội dung từ tab **Full transcript** ngay trong trang web (đáp án có sẵn ở DOM), nên độ chính xác là **100%** và **không cần API key, không cần micro, không cần speech-to-text**.
+Hỗ trợ cả hai dạng bài phổ biến:
+
+- **Listen & Type** — tự động gõ đáp án lấy từ tab Full transcript (đáp án có sẵn ở DOM, độ chính xác **100%**).
+- **Listen & Select** — tự động chọn đáp án: thử từng lựa chọn, nếu sai thì chọn lại đáp án còn lại rồi sang câu tiếp theo, lặp đến hết bài.
+
+Không cần API key, không cần micro, không cần speech-to-text.
 
 ![icon](icons/icon128.png)
 
 ## Tính năng
 
-- **Điền câu hiện tại**: gõ đáp án vào ô "Type what you hear..."
-- **Điền + Check**: gõ đáp án rồi bấm Check ngay
-- **Auto chạy hết bài**: tự động làm hết 30/30 câu, có chỉnh delay giữa câu
-- **Dùng phím Esc của trang (mặc định bật)**: tận dụng luôn shortcut sẵn có của dailydictation.com (focus ô input → nhấn Esc → trang tự điền đáp án). Cách này nhanh nhất và không cần đọc Full transcript trước. Tắt checkbox này nếu muốn extension điền thủ công từ tab Full transcript.
-- **Chỉnh tốc độ gõ**: gõ từng ký tự để trông tự nhiên (0–180 ms/ký tự) — mặc định 0ms (điền liền)
+- **Điền câu hiện tại**: gõ đáp án vào ô "Type what you hear..." (Listen & Type) hoặc chọn luôn đáp án đúng (Listen & Select).
+- **Điền + Check**: gõ đáp án rồi bấm Check ngay; với bài Select thì tự thử lần lượt cho đến khi ra đáp án đúng.
+- **Auto chạy hết bài**: tự động làm hết toàn bộ câu trong bài, có chỉnh delay giữa câu.
+  - Với **Listen & Select**: extension click từng lựa chọn, bấm Check, nếu sai thì tự chuyển sang đáp án còn lại rồi bấm Next.
+- **Dùng phím Esc của trang (mặc định bật, chỉ cho Listen & Type)**: tận dụng luôn shortcut sẵn có của dailydictation.com (focus ô input → nhấn Esc → trang tự điền đáp án). Cách này nhanh nhất và không cần đọc Full transcript trước. Tắt checkbox này nếu muốn extension điền thủ công từ tab Full transcript.
+- **Chỉnh tốc độ gõ** (Listen & Type): gõ từng ký tự để trông tự nhiên (0–180 ms/ký tự) — mặc định 0ms (điền liền).
 - **Phím tắt**:
-  - `Ctrl+Shift+Enter` → Điền câu hiện tại
+  - `Ctrl+Shift+Enter` → Điền / chọn câu hiện tại
   - `Ctrl+Shift+A` → Bật / tắt Auto
   - `Ctrl+Shift+H` → Thu gọn / mở panel nổi
 - **Panel nổi** ở góc dưới bên phải, có thể kéo, thu gọn hoặc tắt từ popup.
@@ -25,8 +31,9 @@ Extension đọc thẳng nội dung từ tab **Full transcript** ngay trong tran
 1. Mở `chrome://extensions/` (hoặc `edge://extensions/`).
 2. Bật **Developer mode** ở góc trên bên phải.
 3. Bấm **Load unpacked** và chọn thư mục `daily-dictation-helper` (thư mục chứa file `manifest.json`).
-4. Mở một bài bất kỳ kiểu *Listen & Type* trên dailydictation.com (ví dụ:
-   <https://dailydictation.com/exercises/numbers/phone-numbers.344/listen-and-type>).
+4. Mở một bài trên dailydictation.com. Ví dụ:
+   - Listen & Type: <https://dailydictation.com/exercises/numbers/phone-numbers.344/listen-and-type>
+   - Listen & Select: <https://dailydictation.com/exercises/english-pronunciation/i-vs-ee-it-vs-eat.684/listen-and-select>
 5. Panel "DD Helper" xuất hiện ở góc dưới bên phải. Bấm **Điền + Check** hoặc **Auto chạy hết bài**.
 
 > Mẹo: Nếu mới mở bài ra mà panel báo "0 đáp án sẵn", hãy bấm sang tab **Full transcript** một lần rồi quay lại tab **Dictation**. Sau đó extension sẽ thấy đầy đủ 30 câu.
@@ -51,12 +58,26 @@ daily-dictation-helper/
 
 ## Cách hoạt động
 
+### Listen & Type
+
 - Mọi bài Listen & Type trên dailydictation.com đều render sẵn các đáp án vào DOM dưới class `.list-group-item` (cho tab Full transcript) — kể cả khi tab Full transcript đang ẩn.
 - Extension chỉ cần:
   1. Đọc 30 phần tử `.list-group-item` để lấy mảng đáp án.
   2. Tìm số câu hiện tại từ nút có dạng `X / 30`.
   3. Set giá trị `#dictationInput` qua native setter để React nhận `input` event.
   4. Bấm `#btn-check`, đợi, rồi bấm `#btn-next` (hoặc `#btn-skip` nếu chưa hiện Next).
+
+### Listen & Select
+
+Bài này không có sẵn đáp án trong DOM trước khi bấm Check, nên extension dùng chiến thuật thử-và-sửa:
+
+1. Tìm danh sách lựa chọn bằng selector `[title^="You can press"][title*="to select"]`.
+2. Click lựa chọn đầu tiên, sau đó bấm nút **Check**.
+3. Quan sát class của các lựa chọn:
+   - `border-success` → đã chọn đúng.
+   - `border-danger` → sai → chuyển sang lựa chọn tiếp theo (trang tự đánh dấu đúng sau khi click).
+4. Khi xuất hiện nút **Next** → click để sang câu tiếp theo, đợi counter `X of Y` chuyển số rồi lặp lại.
+5. Dừng khi đã ở câu cuối và đã bấm Next.
 
 ## Tự build / dev
 
