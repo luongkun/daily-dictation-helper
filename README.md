@@ -11,7 +11,8 @@ Extension đọc thẳng nội dung từ tab **Full transcript** ngay trong tran
 - **Điền câu hiện tại**: gõ đáp án vào ô "Type what you hear..."
 - **Điền + Check**: gõ đáp án rồi bấm Check ngay
 - **Auto chạy hết bài**: tự động làm hết 30/30 câu, có chỉnh delay giữa câu
-- **Chỉnh tốc độ gõ**: gõ từng ký tự để trông tự nhiên (0–180 ms/ký tự)
+- **Dùng phím Esc của trang (mặc định bật)**: tận dụng luôn shortcut sẵn có của dailydictation.com (focus ô input → nhấn Esc → trang tự điền đáp án). Cách này nhanh nhất và không cần đọc Full transcript trước. Tắt checkbox này nếu muốn extension điền thủ công từ tab Full transcript.
+- **Chỉnh tốc độ gõ**: gõ từng ký tự để trông tự nhiên (0–180 ms/ký tự) — mặc định 0ms (điền liền)
 - **Phím tắt**:
   - `Ctrl+Shift+Enter` → Điền câu hiện tại
   - `Ctrl+Shift+A` → Bật / tắt Auto

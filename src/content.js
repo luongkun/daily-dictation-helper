@@ -11,8 +11,9 @@
     enabled: true,
     autoRunning: false,
     autoStopRequested: false,
-    autoDelayMs: 1500,
-    autoTypingMs: 60,
+    autoDelayMs: 120,
+    autoTypingMs: 0,
+    useEscapeShortcut: true,
     pressCheckTwice: true,
     panelMinimized: false,
   };
@@ -91,12 +92,43 @@
 
   // ---------- core actions ----------
 
+  // Trang dailydictation.com có phim tắt bổ sung: focus ô input rồi nhấn Esc
+  // -> trang tự điền đáp án. Ta xài luôn cách này cho nhanh & chính xác hơn.
+  function pressEscapeOn(el) {
+    const opts = {
+      key: "Escape",
+      code: "Escape",
+      keyCode: 27,
+      which: 27,
+      bubbles: true,
+      cancelable: true,
+    };
+    el.dispatchEvent(new KeyboardEvent("keydown", opts));
+    el.dispatchEvent(new KeyboardEvent("keypress", opts));
+    el.dispatchEvent(new KeyboardEvent("keyup", opts));
+  }
+
+  function fillByTranscript(input, answerText) {
+    setNativeValue(input, answerText);
+  }
+
   async function fillCurrent() {
     const input = $(SELECTORS.input);
     if (!input) {
       toast("Không tìm thấy ô nhập (đang ở tab Dictation chưa?)", "error");
       return false;
     }
+
+    // Ưu tiên: focus input + nhấn Esc để trang tự điền.
+    if (STATE.useEscapeShortcut) {
+      input.focus();
+      pressEscapeOn(input);
+      // Đợi 1 frame ngắn rồi kiểm tra. Nếu trang đã điền, kết thúc.
+      await sleep(40);
+      if (input.value && input.value.trim().length > 0) return true;
+    }
+
+    // Fallback: điền thủ công từ Full transcript.
     const cur = getCurrent();
     if (!cur) {
       toast("Không xác định được số câu hiện tại", "error");
@@ -104,7 +136,7 @@
     }
     const answers = readAnswers();
     if (answers.length === 0) {
-      toast("Chưa load được Full transcript — thử click tab Full transcript một lần rồi quay lại", "error");
+      toast("Chưa load được Full transcript — click tab Full transcript một lần rồi thử lại", "error");
       return false;
     }
     const ans = answers[cur.index];
@@ -112,7 +144,11 @@
       toast(`Không có đáp án cho câu ${cur.index + 1}`, "error");
       return false;
     }
-    await typeIntoInput(input, ans, STATE.autoTypingMs);
+    if (STATE.autoTypingMs > 0) {
+      await typeIntoInput(input, ans, STATE.autoTypingMs);
+    } else {
+      fillByTranscript(input, ans);
+    }
     return true;
   }
 
@@ -128,8 +164,11 @@
   async function fillAndCheck() {
     const ok = await fillCurrent();
     if (!ok) return false;
-    await sleep(100);
-    clickIfExists(SELECTORS.btnCheck);
+    // Nếu dùng Esc thì trang đã tự check, không cần bấm thêm.
+    if (!STATE.useEscapeShortcut) {
+      await sleep(80);
+      clickIfExists(SELECTORS.btnCheck);
+    }
     return true;
   }
 
@@ -149,7 +188,7 @@
       if (!cur) break;
       if (cur.index === lastIndex) {
         stuckCount += 1;
-        if (stuckCount > 5) break;
+        if (stuckCount > 8) break;
       } else {
         stuckCount = 0;
       }
@@ -157,13 +196,17 @@
 
       const ok = await fillCurrent();
       if (!ok) break;
-      await sleep(120);
-      clickIfExists(SELECTORS.btnCheck);
+
+      // Nếu không dùng Esc thì tự bấm Check.
+      if (!STATE.useEscapeShortcut) {
+        await sleep(60);
+        clickIfExists(SELECTORS.btnCheck);
+      }
+
       await sleep(STATE.autoDelayMs);
 
       const isLast = cur.index >= cur.total - 1;
       if (isLast) {
-        // Vẫn bấm Next/Check để hiện đáp án câu cuối.
         clickIfExists(SELECTORS.btnNext) || clickIfExists(SELECTORS.btnCheck);
         break;
       }
@@ -171,7 +214,8 @@
       if (!clickIfExists(SELECTORS.btnNext)) {
         clickIfExists(SELECTORS.btnSkip);
       }
-      await sleep(450);
+      // Chờ một frame cho counter chuyển sang câu mới.
+      await sleep(Math.max(50, Math.min(STATE.autoDelayMs, 200)));
     }
 
     STATE.autoRunning = false;
@@ -209,13 +253,16 @@
         </div>
         <div class="ddh-row ddh-controls">
           <label class="ddh-label">Delay giữa câu</label>
-          <input class="ddh-range" type="range" min="500" max="6000" step="100" data-role="delay" />
-          <span class="ddh-val" data-role="delay-val">1.5s</span>
+          <input class="ddh-range" type="range" min="50" max="3000" step="50" data-role="delay" />
+          <span class="ddh-val" data-role="delay-val">0.12s</span>
         </div>
         <div class="ddh-row ddh-controls">
           <label class="ddh-label">Gõ từng ký tự</label>
           <input class="ddh-range" type="range" min="0" max="180" step="5" data-role="typing" />
-          <span class="ddh-val" data-role="typing-val">60ms</span>
+          <span class="ddh-val" data-role="typing-val">0ms</span>
+        </div>
+        <div class="ddh-row ddh-controls">
+          <label class="ddh-checkbox"><input type="checkbox" data-role="use-esc" /> Dùng phím Esc (nhanh nhất)</label>
         </div>
         <div class="ddh-hint">Phím tắt: <b>Ctrl+Shift+Enter</b> = Điền · <b>Ctrl+Shift+A</b> = Auto · <b>Ctrl+Shift+H</b> = Ẩn panel</div>
       </div>
@@ -243,13 +290,14 @@
       }
     });
 
+    const fmtDelay = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`);
     const delay = panelEl.querySelector('[data-role="delay"]');
     const delayVal = panelEl.querySelector('[data-role="delay-val"]');
     delay.value = STATE.autoDelayMs;
-    delayVal.textContent = `${(STATE.autoDelayMs / 1000).toFixed(1)}s`;
+    delayVal.textContent = fmtDelay(STATE.autoDelayMs);
     delay.addEventListener("input", () => {
       STATE.autoDelayMs = parseInt(delay.value, 10);
-      delayVal.textContent = `${(STATE.autoDelayMs / 1000).toFixed(1)}s`;
+      delayVal.textContent = fmtDelay(STATE.autoDelayMs);
       saveSettings();
     });
 
@@ -260,6 +308,13 @@
     typing.addEventListener("input", () => {
       STATE.autoTypingMs = parseInt(typing.value, 10);
       typingVal.textContent = `${STATE.autoTypingMs}ms`;
+      saveSettings();
+    });
+
+    const useEsc = panelEl.querySelector('[data-role="use-esc"]');
+    useEsc.checked = STATE.useEscapeShortcut;
+    useEsc.addEventListener("change", () => {
+      STATE.useEscapeShortcut = useEsc.checked;
       saveSettings();
     });
 
@@ -379,14 +434,16 @@
       chrome.storage.sync.get(
         {
           enabled: true,
-          autoDelayMs: 1500,
-          autoTypingMs: 60,
+          autoDelayMs: 120,
+          autoTypingMs: 0,
+          useEscapeShortcut: true,
           panelMinimized: false,
         },
         (vals) => {
           STATE.enabled = vals.enabled;
           STATE.autoDelayMs = vals.autoDelayMs;
           STATE.autoTypingMs = vals.autoTypingMs;
+          STATE.useEscapeShortcut = vals.useEscapeShortcut;
           STATE.panelMinimized = vals.panelMinimized;
           resolve();
         },
@@ -399,6 +456,7 @@
       enabled: STATE.enabled,
       autoDelayMs: STATE.autoDelayMs,
       autoTypingMs: STATE.autoTypingMs,
+      useEscapeShortcut: STATE.useEscapeShortcut,
       panelMinimized: STATE.panelMinimized,
     });
   }
@@ -411,6 +469,7 @@
     }
     if ("autoDelayMs" in changes) STATE.autoDelayMs = changes.autoDelayMs.newValue;
     if ("autoTypingMs" in changes) STATE.autoTypingMs = changes.autoTypingMs.newValue;
+    if ("useEscapeShortcut" in changes) STATE.useEscapeShortcut = changes.useEscapeShortcut.newValue;
     if ("panelMinimized" in changes) STATE.panelMinimized = changes.panelMinimized.newValue;
     if (needsRefresh) {
       if (STATE.enabled) {
