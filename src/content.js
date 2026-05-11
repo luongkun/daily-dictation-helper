@@ -24,6 +24,9 @@
     btnSkip: "#btn-skip",
     btnNext: "#btn-next",
     transcriptItems: ".list-group-item",
+    // Listen-and-select page (multiple-choice audio)
+    selectOption: '[title^="You can press"][title*="to select"]',
+    arrowRight: "button.bi-arrow-right, button.bi.bi-arrow-right",
   };
 
   // ---------- helpers ----------
@@ -60,11 +63,105 @@
   }
 
   function getCurrent() {
+    // Listen & Type uses a button with text like "3 / 30".
     const btn = getCounterButton();
-    if (!btn) return null;
-    const m = (btn.innerText || "").match(/(\d+)\s*\/\s*(\d+)/);
-    if (!m) return null;
-    return { index: parseInt(m[1], 10) - 1, total: parseInt(m[2], 10) };
+    if (btn) {
+      const m = (btn.innerText || "").match(/(\d+)\s*\/\s*(\d+)/);
+      if (m) return { index: parseInt(m[1], 10) - 1, total: parseInt(m[2], 10) };
+    }
+    // Listen & Select uses a span like "1 of 10" inside a nav row.
+    for (const s of $all("span")) {
+      const t = (s.innerText || "").trim();
+      const m = t.match(/^(\d+)\s+of\s+(\d+)$/i);
+      if (m) return { index: parseInt(m[1], 10) - 1, total: parseInt(m[2], 10) };
+    }
+    return null;
+  }
+
+  // ---------- mode detection ----------
+
+  function isSelectMode() {
+    if (/\/listen-and-select(\/|$|\?)/.test(location.pathname + location.search)) return true;
+    return !!$(SELECTORS.selectOption);
+  }
+
+  // ---------- listen-and-select helpers ----------
+
+  function getSelectOptions() {
+    return $all(SELECTORS.selectOption);
+  }
+
+  function findButtonByText(re) {
+    return $all("button").find((b) => re.test((b.innerText || "").trim()) && !b.disabled);
+  }
+
+  function getCheckButton() {
+    return $(SELECTORS.btnCheck) || findButtonByText(/^check$/i);
+  }
+
+  function getNextButton() {
+    const native = $(SELECTORS.btnNext);
+    if (native && !native.disabled) return native;
+    return findButtonByText(/^next$/i);
+  }
+
+  function optionHasClass(opt, cls) {
+    return ((opt && opt.className) || "").split(/\s+/).includes(cls);
+  }
+
+  function getCorrectOption() {
+    return getSelectOptions().find((o) => optionHasClass(o, "border-success"));
+  }
+
+  function questionAlreadySolved() {
+    return !!(getCorrectOption() || getNextButton());
+  }
+
+  async function solveSelectQuestion() {
+    const options = getSelectOptions();
+    if (options.length === 0) {
+      toast("Không tìm thấy đáp án (đang ở bài Listen & Select?)", "error");
+      return false;
+    }
+    if (questionAlreadySolved()) return true;
+
+    // Try options one by one until one is marked correct.
+    for (let i = 0; i < options.length; i++) {
+      if (STATE.autoStopRequested) return false;
+      const opt = options[i];
+      // Skip options already revealed as wrong.
+      if (optionHasClass(opt, "border-danger") || optionHasClass(opt, "border-success")) continue;
+      opt.click();
+      await sleep(120);
+      const check = getCheckButton();
+      if (check && !check.disabled) {
+        check.click();
+        await sleep(220);
+      } else {
+        // After a wrong attempt the Check button is gone; clicking the
+        // remaining option directly already reveals success.
+        await sleep(180);
+      }
+      if (questionAlreadySolved()) return true;
+    }
+    return questionAlreadySolved();
+  }
+
+  function clickAdvanceSelect() {
+    const n = getNextButton();
+    if (n) {
+      n.click();
+      return true;
+    }
+    // Fallback: top arrow.
+    const arrow = $all("button").find(
+      (b) => /(^|\s)bi-arrow-right(\s|$)/.test(b.className) && !b.disabled,
+    );
+    if (arrow) {
+      arrow.click();
+      return true;
+    }
+    return false;
   }
 
   function setNativeValue(el, value) {
@@ -113,6 +210,9 @@
   }
 
   async function fillCurrent() {
+    if (isSelectMode()) {
+      return await solveSelectQuestion();
+    }
     const input = $(SELECTORS.input);
     if (!input) {
       toast("Không tìm thấy ô nhập (đang ở tab Dictation chưa?)", "error");
@@ -162,6 +262,10 @@
   }
 
   async function fillAndCheck() {
+    if (isSelectMode()) {
+      // solveSelectQuestion already clicks Check as part of trying options.
+      return await solveSelectQuestion();
+    }
     const ok = await fillCurrent();
     if (!ok) return false;
     // Nếu dùng Esc thì trang đã tự check, không cần bấm thêm.
@@ -179,6 +283,18 @@
     updatePanel();
     toast("Auto bắt đầu", "ok");
 
+    if (isSelectMode()) {
+      await autoRunSelect();
+    } else {
+      await autoRunType();
+    }
+
+    STATE.autoRunning = false;
+    updatePanel();
+    toast(STATE.autoStopRequested ? "Auto đã dừng" : "Auto hoàn tất", "ok");
+  }
+
+  async function autoRunType() {
     let safety = 0;
     let lastIndex = -1;
     let stuckCount = 0;
@@ -217,10 +333,47 @@
       // Chờ một frame cho counter chuyển sang câu mới.
       await sleep(Math.max(50, Math.min(STATE.autoDelayMs, 200)));
     }
+  }
 
-    STATE.autoRunning = false;
-    updatePanel();
-    toast(STATE.autoStopRequested ? "Auto đã dừng" : "Auto hoàn tất", "ok");
+  async function autoRunSelect() {
+    let safety = 0;
+    let lastIndex = -1;
+    let stuckCount = 0;
+    while (!STATE.autoStopRequested && safety < 500) {
+      safety += 1;
+      const cur = getCurrent();
+      if (!cur) break;
+      if (cur.index === lastIndex) {
+        stuckCount += 1;
+        if (stuckCount > 12) break;
+      } else {
+        stuckCount = 0;
+      }
+      lastIndex = cur.index;
+
+      const ok = await solveSelectQuestion();
+      if (!ok) break;
+
+      await sleep(STATE.autoDelayMs);
+
+      const isLast = cur.index >= cur.total - 1;
+      const advanced = clickAdvanceSelect();
+      if (isLast && !advanced) break;
+      if (isLast) {
+        // Last question already solved; give the page a moment for any
+        // completion screen, then stop.
+        await sleep(Math.max(120, STATE.autoDelayMs));
+        break;
+      }
+      // Wait for the counter to advance.
+      const targetIdx = cur.index + 1;
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 4000) {
+        await sleep(80);
+        const c = getCurrent();
+        if (!c || c.index >= targetIdx) break;
+      }
+    }
   }
 
   function stopAuto() {
@@ -369,9 +522,17 @@
       const status = panelEl.querySelector('[data-role="status"]');
       const autoBtn = panelEl.querySelector('[data-role="auto"]');
       if (status) {
-        const newText = cur
-          ? `Câu ${cur.index + 1} / ${cur.total} · ${answers.length} đáp án sẵn`
-          : "Mở một bài Listen & Type để bắt đầu";
+        let newText;
+        if (isSelectMode()) {
+          const opts = getSelectOptions();
+          newText = cur
+            ? `Câu ${cur.index + 1} / ${cur.total} · ${opts.length} lựa chọn (Listen & Select)`
+            : "Mở một bài Listen & Select để bắt đầu";
+        } else {
+          newText = cur
+            ? `Câu ${cur.index + 1} / ${cur.total} · ${answers.length} đáp án sẵn`
+            : "Mở một bài Listen & Type để bắt đầu";
+        }
         if (status.textContent !== newText) status.textContent = newText;
       }
       if (autoBtn) {
@@ -489,7 +650,14 @@
     if (!msg || typeof msg !== "object") return;
     switch (msg.action) {
       case "ping":
-        sendResponse({ ok: true, current: getCurrent(), answerCount: readAnswers().length, autoRunning: STATE.autoRunning, enabled: STATE.enabled });
+        sendResponse({
+          ok: true,
+          current: getCurrent(),
+          answerCount: isSelectMode() ? getSelectOptions().length : readAnswers().length,
+          mode: isSelectMode() ? "select" : "type",
+          autoRunning: STATE.autoRunning,
+          enabled: STATE.enabled,
+        });
         break;
       case "fill":
         fillCurrent().then((ok) => sendResponse({ ok }));
