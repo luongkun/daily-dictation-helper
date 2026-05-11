@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily Dictation Helper</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="hdr">
+      <img src="../icons/icon48.png" alt="" width="36" height="36" />
+      <div>
+        <div class="title">Daily Dictation Helper</div>
+        <div class="subtitle">dailydictation.com</div>
+      </div>
+    </header>
+
+    <section class="card">
+      <label class="switch">
+        <input id="enabled" type="checkbox" />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="switch-label">Bật extension</span>
+      </label>
+      <div id="status" class="status">Đang kiểm tra trang…</div>
+    </section>
+
+    <section class="card actions">
+      <button id="btn-fill" class="btn primary">Điền câu hiện tại</button>
+      <button id="btn-fill-check" class="btn success">Điền + Check</button>
+      <button id="btn-auto" class="btn auto">▶ Auto chạy hết bài</button>
+    </section>
+
+    <section class="card sliders">
+      <div class="slider-row">
+        <label for="delay">Delay giữa câu</label>
+        <input id="delay" type="range" min="500" max="6000" step="100" />
+        <span id="delay-val" class="val">1.5s</span>
+      </div>
+      <div class="slider-row">
+        <label for="typing">Gõ từng ký tự</label>
+        <input id="typing" type="range" min="0" max="180" step="5" />
+        <span id="typing-val" class="val">60ms</span>
+      </div>
+    </section>
+
+    <footer class="ft">
+      <div class="kbd"><b>Ctrl+Shift+Enter</b> Điền · <b>Ctrl+Shift+A</b> Auto · <b>Ctrl+Shift+H</b> Ẩn panel</div>
+      <a href="https://github.com/luongkun/daily-dictation-helper" target="_blank" rel="noopener">GitHub repo ↗</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

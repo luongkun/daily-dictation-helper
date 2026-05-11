@@ -1,0 +1,207 @@
+/* Daily Dictation Helper - floating panel & toast */
+
+#ddh-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 280px;
+  z-index: 2147483647;
+  background: #ffffff;
+  color: #1f2933;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, "Helvetica Neue", Arial, sans-serif;
+  border: 1px solid #d8dee7;
+  border-radius: 12px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel {
+    background: #1e2632;
+    color: #e6ecf5;
+    border-color: #2f3a4a;
+  }
+}
+
+#ddh-panel.ddh-min .ddh-body {
+  display: none;
+}
+
+#ddh-panel .ddh-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, #4f8cff, #2c6ce8);
+  color: #fff;
+  cursor: grab;
+}
+
+#ddh-panel .ddh-header:active {
+  cursor: grabbing;
+}
+
+#ddh-panel .ddh-title {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  flex: 1;
+  pointer-events: none;
+}
+
+#ddh-panel .ddh-icon {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#ddh-panel .ddh-icon:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+#ddh-panel .ddh-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ddh-panel .ddh-status {
+  font-size: 12px;
+  color: #475569;
+  padding: 4px 8px;
+  background: #eef2f7;
+  border-radius: 6px;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-status {
+    background: #2a3344;
+    color: #c2cad8;
+  }
+}
+
+#ddh-panel .ddh-row {
+  display: flex;
+  gap: 6px;
+}
+
+#ddh-panel .ddh-btn {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  transition: filter 0.15s ease;
+}
+
+#ddh-panel .ddh-btn:hover {
+  filter: brightness(1.05);
+}
+
+#ddh-panel .ddh-btn:active {
+  filter: brightness(0.95);
+}
+
+#ddh-panel .ddh-btn-primary {
+  background: #2c6ce8;
+}
+
+#ddh-panel .ddh-btn-success {
+  background: #16a34a;
+}
+
+#ddh-panel .ddh-btn-auto {
+  background: #f59e0b;
+}
+
+#ddh-panel .ddh-btn-auto.ddh-running {
+  background: #dc2626;
+}
+
+#ddh-panel .ddh-controls {
+  align-items: center;
+}
+
+#ddh-panel .ddh-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #475569;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-label {
+    color: #c2cad8;
+  }
+}
+
+#ddh-panel .ddh-range {
+  flex: 1;
+  accent-color: #2c6ce8;
+}
+
+#ddh-panel .ddh-val {
+  flex: 0 0 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+#ddh-panel .ddh-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-hint {
+    color: #94a3b8;
+  }
+}
+
+.ddh-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  background: #111827;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.3);
+  opacity: 1;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.ddh-toast.ddh-toast-out {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+.ddh-toast-error {
+  background: #b91c1c;
+}
+
+.ddh-toast-ok {
+  background: #1f2937;
+}
