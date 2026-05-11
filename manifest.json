@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Daily Dictation Helper",
+  "short_name": "DD Helper",
+  "version": "1.0.0",
+  "description": "Tự động điền đáp án bài luyện nghe trên dailydictation.com bằng nội dung từ tab Full transcript của chính trang web.",
+  "author": "luongkun",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Daily Dictation Helper",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://dailydictation.com/*", "https://*.dailydictation.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://dailydictation.com/*", "https://*.dailydictation.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://dailydictation.com/*", "https://*.dailydictation.com/*"]
+    }
+  ]
+}
