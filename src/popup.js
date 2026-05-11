@@ -4,7 +4,7 @@ const DEFAULTS = {
   enabled: true,
   autoDelayMs: 120,
   autoTypingMs: 0,
-  useEscapeShortcut: true,
+  useEscapeShortcut: false,
   panelMinimized: false,
   playAudioFirst: true,
   audioPlaybackRate: 8,

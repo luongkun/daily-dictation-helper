@@ -13,7 +13,10 @@
     autoStopRequested: false,
     autoDelayMs: 120,
     autoTypingMs: 0,
-    useEscapeShortcut: true,
+    // NOTE: mặc định TẮT phím Esc. Esc là shortcut "show answer" của
+    // trang (để xem đáp án), và một số bài trang không tính kết quả khi
+    // đáp án được điền qua cách này. Điền thẳng + bấm Check an toàn hơn.
+    useEscapeShortcut: false,
     pressCheckTwice: true,
     panelMinimized: false,
     // Trang dailydictation.com chỉ "tính" câu làm được khi audio đã được phát
@@ -142,79 +145,97 @@
     return false;
   }
 
+  const LOG_PREFIX = "[DDH]";
+  const logEnabled = () => true; // bật log để user dễ debug
+  const log = (...args) => {
+    if (logEnabled()) console.log(LOG_PREFIX, ...args);
+  };
+
   async function ensureAudioListened() {
     if (!STATE.playAudioFirst) return true;
 
     const cur = getCurrent();
     const idx = cur ? cur.index : -1;
     const key = _playedKeyFor(idx);
-    if (idx >= 0 && _playedSet.has(key)) return true;
+    if (idx >= 0 && _playedSet.has(key)) {
+      log("audio: already played for index", idx, "- skip");
+      return true;
+    }
 
     const audio = getActiveAudio();
     if (!audio) {
-      // Không tìm thấy <audio>, thử nút Play như một fallback nhẹ.
+      log("audio: <audio> not found, trying Play button");
       const clicked = clickPlayButton();
-      if (!clicked) return true; // không có gì để phát -> khỏi chặn flow
+      if (!clicked) {
+        log("audio: no Play button either - skip");
+        return true;
+      }
       await sleep(300);
       if (idx >= 0) _playedSet.add(key);
       return true;
     }
 
+    log("audio: found", {
+      src: audio.currentSrc || audio.src,
+      duration: audio.duration,
+      readyState: audio.readyState,
+    });
+
     try {
-      // Lưu trạng thái gốc để khôi phục.
       const prevMuted = audio.muted;
+      const prevVolume = audio.volume;
       const prevRate = audio.playbackRate;
-      const prevTime = audio.currentTime;
 
       const rate = Math.max(1, Math.min(16, STATE.audioPlaybackRate || 1));
       try {
-        audio.muted = true;
+        audio.muted = false;
+        audio.volume = 0;
         audio.playbackRate = rate;
         audio.currentTime = 0;
-      } catch (_e) {
-        // Một số browser không cho set currentTime trước khi metadata sẵn sàng.
+      } catch (_e) {}
+
+      let started = clickPlayButton();
+      if (started) {
+        log("audio: started via Play button");
+      } else {
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          await playPromise.catch((err) => log("audio: play() rejected", err));
+        }
+        started = !audio.paused;
+        log("audio: started via audio.play()", { paused: audio.paused });
       }
 
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        // Nếu autoplay bị chặn (hiếm vì user đã tương tác), fallback click Play.
-        await playPromise.catch(() => {
-          clickPlayButton();
-        });
-      }
-
-      // Đợi đến khi audio kết thúc, hoặc timeout an toàn.
-      await new Promise((resolve) => {
+      const t0 = performance.now();
+      const reason = await new Promise((resolve) => {
         let done = false;
-        const finish = () => {
+        const finish = (r) => {
           if (done) return;
           done = true;
-          audio.removeEventListener("ended", finish);
-          audio.removeEventListener("pause", onPause);
+          audio.removeEventListener("ended", onEnded);
           clearTimeout(timer);
-          resolve();
+          resolve(r);
         };
-        const onPause = () => {
-          // Một số trang pause audio ngay khi ended; coi như xong.
-          if (audio.ended || audio.currentTime >= (audio.duration || 0) - 0.05) finish();
-        };
-        audio.addEventListener("ended", finish, { once: true });
-        audio.addEventListener("pause", onPause);
-        // Timeout: duration/rate + buffer, tối thiểu 600ms, tối đa 15s.
+        const onEnded = () => finish("ended");
+        audio.addEventListener("ended", onEnded, { once: true });
         const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 10;
-        const timeoutMs = Math.max(600, Math.min(15000, (dur / rate) * 1000 + 500));
-        const timer = setTimeout(finish, timeoutMs);
+        const timeoutMs = Math.max(800, Math.min(15000, (dur / rate) * 1000 + 800));
+        const timer = setTimeout(() => finish("timeout"), timeoutMs);
+      });
+      log("audio: finished", {
+        reason,
+        elapsedMs: Math.round(performance.now() - t0),
+        currentTime: audio.currentTime,
+        duration: audio.duration,
       });
 
-      // Khôi phục lại các thuộc tính để không phá UX khi người dùng nghe lại.
       try {
-        audio.pause();
         audio.muted = prevMuted;
+        audio.volume = prevVolume;
         audio.playbackRate = prevRate;
-        audio.currentTime = prevTime;
       } catch (_e) {}
-    } catch (_e) {
-      // Nuốt lỗi — không chặn flow điền.
+    } catch (e) {
+      log("audio: error", e);
     }
 
     if (idx >= 0) _playedSet.add(key);
@@ -358,6 +379,7 @@
 
     // Phát audio trước để trang đánh dấu câu đã được nghe (điều kiện để
     // trang cộng kết quả / progress). Bỏ qua nếu user tắt tuỳ chọn này.
+    log("fillCurrent: begin, index=", (getCurrent() || {}).index);
     await ensureAudioListened();
 
     // Ưu tiên: focus input + nhấn Esc để trang tự điền.
@@ -366,7 +388,10 @@
       pressEscapeOn(input);
       // Đợi 1 frame ngắn rồi kiểm tra. Nếu trang đã điền, kết thúc.
       await sleep(40);
-      if (input.value && input.value.trim().length > 0) return true;
+      if (input.value && input.value.trim().length > 0) {
+        log("fillCurrent: filled via Esc shortcut");
+        return true;
+      }
     }
 
     // Fallback: điền thủ công từ Full transcript.
@@ -385,6 +410,7 @@
       toast(`Không có đáp án cho câu ${cur.index + 1}`, "error");
       return false;
     }
+    log("fillCurrent: typing answer", { index: cur.index, answer: ans });
     if (STATE.autoTypingMs > 0) {
       await typeIntoInput(input, ans, STATE.autoTypingMs);
     } else {
@@ -765,7 +791,7 @@
           enabled: true,
           autoDelayMs: 120,
           autoTypingMs: 0,
-          useEscapeShortcut: true,
+          useEscapeShortcut: false,
           panelMinimized: false,
           playAudioFirst: true,
           audioPlaybackRate: 8,
