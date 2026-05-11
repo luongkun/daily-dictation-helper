@@ -2,8 +2,9 @@
 
 const DEFAULTS = {
   enabled: true,
-  autoDelayMs: 1500,
-  autoTypingMs: 60,
+  autoDelayMs: 120,
+  autoTypingMs: 0,
+  useEscapeShortcut: true,
   panelMinimized: false,
 };
 
@@ -17,6 +18,7 @@ const el = {
   delayVal: document.getElementById("delay-val"),
   typing: document.getElementById("typing"),
   typingVal: document.getElementById("typing-val"),
+  useEsc: document.getElementById("use-esc"),
 };
 
 let activeTabId = null;
@@ -49,7 +51,7 @@ function sendToTab(action) {
 }
 
 function fmtDelay(ms) {
-  return `${(ms / 1000).toFixed(1)}s`;
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
 }
 
 function fmtTyping(ms) {
@@ -108,6 +110,7 @@ async function init() {
   el.delayVal.textContent = fmtDelay(stored.autoDelayMs);
   el.typing.value = stored.autoTypingMs;
   el.typingVal.textContent = fmtTyping(stored.autoTypingMs);
+  if (el.useEsc) el.useEsc.checked = !!stored.useEscapeShortcut;
 
   updateStatusText();
   updateActionButtons();
@@ -135,6 +138,12 @@ el.typing.addEventListener("input", () => {
   el.typingVal.textContent = fmtTyping(v);
   chrome.storage.sync.set({ autoTypingMs: v });
 });
+
+if (el.useEsc) {
+  el.useEsc.addEventListener("change", () => {
+    chrome.storage.sync.set({ useEscapeShortcut: el.useEsc.checked });
+  });
+}
 
 el.fill.addEventListener("click", async () => {
   await sendToTab("fill");

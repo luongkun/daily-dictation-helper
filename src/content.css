@@ -164,6 +164,21 @@
   font-size: 12px;
 }
 
+#ddh-panel .ddh-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-checkbox {
+    color: #c2cad8;
+  }
+}
+
 #ddh-panel .ddh-hint {
   margin-top: 2px;
   font-size: 11px;
