@@ -6,8 +6,11 @@ const DEFAULTS = {
   autoTypingMs: 0,
   panelMinimized: false,
   antiIdleEnabled: true,
-  antiIdleIntervalMs: 45000,
+  antiIdleMode: "safe",
 };
+
+const MODE_LABELS = { safe: "An toàn", fast: "Nhanh", turbo: "Turbo" };
+const MODE_INTERVALS = { safe: 45, fast: 15, turbo: 5 };
 
 const el = {
   enabled: document.getElementById("enabled"),
@@ -20,10 +23,18 @@ const el = {
   typing: document.getElementById("typing"),
   typingVal: document.getElementById("typing-val"),
   antiIdle: document.getElementById("anti-idle"),
-  antiIdleInterval: document.getElementById("anti-idle-interval"),
-  antiIdleIntervalVal: document.getElementById("anti-idle-interval-val"),
+  antiIdleModes: document.getElementById("anti-idle-modes"),
   antiIdleStatus: document.getElementById("anti-idle-status"),
 };
+
+let antiIdleMode = "safe";
+
+function renderModeButtons() {
+  if (!el.antiIdleModes) return;
+  el.antiIdleModes.querySelectorAll("button[data-mode]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === antiIdleMode);
+  });
+}
 
 let activeTabId = null;
 let isDailyDictation = false;
@@ -108,6 +119,12 @@ function updateAntiIdleStatus() {
     return;
   }
   const ai = pingState.antiIdle;
+  if (ai.mode && ai.mode !== antiIdleMode) {
+    antiIdleMode = ai.mode;
+    renderModeButtons();
+  }
+  const intervalSecs = MODE_INTERVALS[ai.mode] ?? Math.round((ai.intervalMs || 0) / 1000);
+  const modeLabel = MODE_LABELS[ai.mode] || "?";
   if (!ai.loggedIn) {
     el.antiIdleStatus.textContent = "Anti-idle: cần đăng nhập";
     return;
@@ -123,7 +140,8 @@ function updateAntiIdleStatus() {
   const last = ai.lastPingAt
     ? `${Math.max(0, Math.round((Date.now() - ai.lastPingAt) / 1000))}s trước`
     : "chưa";
-  el.antiIdleStatus.textContent = `Anti-idle: BẬT · ping ${ai.pingCount} (${last})${ai.timeSpent ? ` · ${ai.timeSpent}` : ""}`;
+  const lastStatus = ai.lastStatus ? ` · HTTP ${ai.lastStatus}` : "";
+  el.antiIdleStatus.textContent = `${modeLabel} (${intervalSecs}s) · ping ${ai.pingCount} (${last})${ai.timeSpent ? ` · ${ai.timeSpent}` : ""}${lastStatus}`;
 }
 
 async function refresh() {
@@ -145,9 +163,8 @@ async function init() {
   el.typing.value = stored.autoTypingMs;
   el.typingVal.textContent = fmtTyping(stored.autoTypingMs);
   el.antiIdle.checked = !!stored.antiIdleEnabled;
-  const aiSecs = Math.round(stored.antiIdleIntervalMs / 1000);
-  el.antiIdleInterval.value = aiSecs;
-  el.antiIdleIntervalVal.textContent = `${aiSecs}s`;
+  antiIdleMode = MODE_LABELS[stored.antiIdleMode] ? stored.antiIdleMode : "safe";
+  renderModeButtons();
 
   updateStatusText();
   updateActionButtons();
@@ -182,11 +199,18 @@ el.antiIdle.addEventListener("change", async () => {
   await refresh();
 });
 
-el.antiIdleInterval.addEventListener("input", () => {
-  const secs = parseInt(el.antiIdleInterval.value, 10);
-  el.antiIdleIntervalVal.textContent = `${secs}s`;
-  chrome.storage.sync.set({ antiIdleIntervalMs: secs * 1000 });
-});
+if (el.antiIdleModes) {
+  el.antiIdleModes.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    const newMode = btn.dataset.mode;
+    if (!MODE_LABELS[newMode]) return;
+    antiIdleMode = newMode;
+    renderModeButtons();
+    await chrome.storage.sync.set({ antiIdleMode: newMode });
+    await refresh();
+  });
+}
 
 el.fill.addEventListener("click", async () => {
   await sendToTab("fill");

@@ -189,6 +189,41 @@ body {
   font-size: 12px;
 }
 
+.mode-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.mode-btn:hover {
+  background: var(--card);
+}
+
+.mode-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.mode-btn.mode-warn.active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
 .ft {
   font-size: 11px;
   color: var(--muted);
