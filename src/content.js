@@ -14,7 +14,17 @@
     autoDelayMs: 120,
     autoTypingMs: 0,
     panelMinimized: false,
+    // Anti-idle: dispatch the page's `focusToInput` window event on a timer
+    // so dailydictation.com keeps crediting study minutes even when the user
+    // is AFK. The page debounces /api/user/update-progress to once per ~40s,
+    // so we tick a hair above that.
+    antiIdleEnabled: true,
+    antiIdleIntervalMs: 45000,
+    antiIdlePingCount: 0,
+    antiIdleLastPingAt: 0,
   };
+
+  let _antiIdleTimer = null;
 
   const SELECTORS = {
     input: "#dictationInput",
@@ -346,6 +356,60 @@
     STATE.autoStopRequested = true;
   }
 
+  // ---------- anti-idle (keep "X minutes" counter ticking while AFK) ----------
+
+  function readTimeSpent() {
+    const el = document.getElementById("time-spent");
+    if (!el) return null;
+    return (el.innerText || el.textContent || "").trim();
+  }
+
+  function canAntiIdle() {
+    // The page only credits study time when logged in. The #time-spent element
+    // is only rendered for logged-in users.
+    return !!document.getElementById("time-spent");
+  }
+
+  function tickAntiIdle() {
+    if (!STATE.enabled) return;
+    if (!STATE.antiIdleEnabled) return;
+    // No need to ping during an auto run — the page already fires focusToInput
+    // on every Check/Next click.
+    if (STATE.autoRunning) return;
+    if (!canAntiIdle()) return;
+    try {
+      window.dispatchEvent(new Event("focusToInput"));
+      STATE.antiIdlePingCount += 1;
+      STATE.antiIdleLastPingAt = Date.now();
+      if (panelEl) updatePanel();
+    } catch (e) {
+      // best-effort; nothing actionable
+      console.warn("[dd-helper] anti-idle dispatch failed", e);
+    }
+  }
+
+  function startAntiIdle() {
+    stopAntiIdle();
+    if (!STATE.enabled || !STATE.antiIdleEnabled) return;
+    const interval = Math.max(20000, STATE.antiIdleIntervalMs | 0);
+    // Fire one immediately so user sees feedback right away (and credits study
+    // time on the first tick).
+    setTimeout(tickAntiIdle, 1500);
+    _antiIdleTimer = setInterval(tickAntiIdle, interval);
+  }
+
+  function stopAntiIdle() {
+    if (_antiIdleTimer) {
+      clearInterval(_antiIdleTimer);
+      _antiIdleTimer = null;
+    }
+  }
+
+  function restartAntiIdle() {
+    stopAntiIdle();
+    startAntiIdle();
+  }
+
   // ---------- UI: floating panel ----------
 
   let panelEl = null;
@@ -380,6 +444,17 @@
           <input class="ddh-range" type="range" min="0" max="180" step="5" data-role="typing" />
           <span class="ddh-val" data-role="typing-val">0ms</span>
         </div>
+        <div class="ddh-divider"></div>
+        <label class="ddh-checkbox">
+          <input type="checkbox" data-role="anti-idle" />
+          <span>Anti-idle (treo máy vẫn tính phút)</span>
+        </label>
+        <div class="ddh-row ddh-controls">
+          <label class="ddh-label">Chu kỳ ping</label>
+          <input class="ddh-range" type="range" min="40" max="90" step="5" data-role="anti-idle-interval" />
+          <span class="ddh-val" data-role="anti-idle-interval-val">45s</span>
+        </div>
+        <div class="ddh-status ddh-status-mini" data-role="anti-idle-status">Anti-idle: —</div>
         <div class="ddh-hint">Phím tắt: <b>Ctrl+Shift+Enter</b> = Điền · <b>Ctrl+Shift+A</b> = Auto · <b>Ctrl+Shift+H</b> = Ẩn panel</div>
       </div>
     `;
@@ -425,6 +500,27 @@
       STATE.autoTypingMs = parseInt(typing.value, 10);
       typingVal.textContent = `${STATE.autoTypingMs}ms`;
       saveSettings();
+    });
+
+    const antiIdle = panelEl.querySelector('[data-role="anti-idle"]');
+    antiIdle.checked = !!STATE.antiIdleEnabled;
+    antiIdle.addEventListener("change", () => {
+      STATE.antiIdleEnabled = antiIdle.checked;
+      saveSettings();
+      restartAntiIdle();
+      updatePanel();
+    });
+
+    const interval = panelEl.querySelector('[data-role="anti-idle-interval"]');
+    const intervalVal = panelEl.querySelector('[data-role="anti-idle-interval-val"]');
+    interval.value = Math.round(STATE.antiIdleIntervalMs / 1000);
+    intervalVal.textContent = `${interval.value}s`;
+    interval.addEventListener("input", () => {
+      const secs = parseInt(interval.value, 10);
+      STATE.antiIdleIntervalMs = secs * 1000;
+      intervalVal.textContent = `${secs}s`;
+      saveSettings();
+      restartAntiIdle();
     });
 
     // Drag the panel
@@ -496,6 +592,25 @@
         if (autoBtn.textContent !== newLabel) autoBtn.textContent = newLabel;
         autoBtn.classList.toggle("ddh-running", STATE.autoRunning);
       }
+      const aiStatus = panelEl.querySelector('[data-role="anti-idle-status"]');
+      if (aiStatus) {
+        const time = readTimeSpent();
+        let txt;
+        if (!canAntiIdle()) {
+          txt = "Anti-idle: cần đăng nhập";
+        } else if (!STATE.antiIdleEnabled) {
+          txt = `Anti-idle: TẮT${time ? ` · hôm nay ${time}` : ""}`;
+        } else if (STATE.autoRunning) {
+          txt = `Anti-idle: chờ auto xong${time ? ` · hôm nay ${time}` : ""}`;
+        } else {
+          const pings = STATE.antiIdlePingCount;
+          const last = STATE.antiIdleLastPingAt
+            ? `${Math.max(0, Math.round((Date.now() - STATE.antiIdleLastPingAt) / 1000))}s trước`
+            : "chưa";
+          txt = `Anti-idle: BẬT · ping ${pings} (${last})${time ? ` · ${time}` : ""}`;
+        }
+        if (aiStatus.textContent !== txt) aiStatus.textContent = txt;
+      }
     } finally {
       _updatingPanel = false;
     }
@@ -554,12 +669,16 @@
           autoDelayMs: 120,
           autoTypingMs: 0,
           panelMinimized: false,
+          antiIdleEnabled: true,
+          antiIdleIntervalMs: 45000,
         },
         (vals) => {
           STATE.enabled = vals.enabled;
           STATE.autoDelayMs = vals.autoDelayMs;
           STATE.autoTypingMs = vals.autoTypingMs;
           STATE.panelMinimized = vals.panelMinimized;
+          STATE.antiIdleEnabled = vals.antiIdleEnabled;
+          STATE.antiIdleIntervalMs = vals.antiIdleIntervalMs;
           resolve();
         },
       );
@@ -572,18 +691,30 @@
       autoDelayMs: STATE.autoDelayMs,
       autoTypingMs: STATE.autoTypingMs,
       panelMinimized: STATE.panelMinimized,
+      antiIdleEnabled: STATE.antiIdleEnabled,
+      antiIdleIntervalMs: STATE.antiIdleIntervalMs,
     });
   }
 
   chrome.storage.onChanged.addListener((changes) => {
     let needsRefresh = false;
+    let needsAntiIdleRestart = false;
     if ("enabled" in changes) {
       STATE.enabled = changes.enabled.newValue;
       needsRefresh = true;
+      needsAntiIdleRestart = true;
     }
     if ("autoDelayMs" in changes) STATE.autoDelayMs = changes.autoDelayMs.newValue;
     if ("autoTypingMs" in changes) STATE.autoTypingMs = changes.autoTypingMs.newValue;
     if ("panelMinimized" in changes) STATE.panelMinimized = changes.panelMinimized.newValue;
+    if ("antiIdleEnabled" in changes) {
+      STATE.antiIdleEnabled = changes.antiIdleEnabled.newValue;
+      needsAntiIdleRestart = true;
+    }
+    if ("antiIdleIntervalMs" in changes) {
+      STATE.antiIdleIntervalMs = changes.antiIdleIntervalMs.newValue;
+      needsAntiIdleRestart = true;
+    }
     if (needsRefresh) {
       if (STATE.enabled) {
         ensurePanel();
@@ -594,6 +725,7 @@
     } else if (panelEl) {
       updatePanel();
     }
+    if (needsAntiIdleRestart) restartAntiIdle();
   });
 
   // ---------- message bridge from popup ----------
@@ -609,6 +741,14 @@
           mode: isSelectMode() ? "select" : "type",
           autoRunning: STATE.autoRunning,
           enabled: STATE.enabled,
+          antiIdle: {
+            enabled: STATE.antiIdleEnabled,
+            intervalMs: STATE.antiIdleIntervalMs,
+            pingCount: STATE.antiIdlePingCount,
+            lastPingAt: STATE.antiIdleLastPingAt,
+            loggedIn: canAntiIdle(),
+            timeSpent: readTimeSpent(),
+          },
         });
         break;
       case "fill":
@@ -662,6 +802,7 @@
     await loadSettings();
     if (STATE.enabled) ensurePanel();
     startObserver();
+    startAntiIdle();
 
     // Invalidate answer cache when user switches transcript tabs.
     document.addEventListener("click", (e) => {

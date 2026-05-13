@@ -179,6 +179,24 @@
   }
 }
 
+#ddh-panel .ddh-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px -2px 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-divider {
+    background: #2f3a4a;
+  }
+}
+
+#ddh-panel .ddh-status-mini {
+  font-size: 11px;
+  padding: 3px 8px;
+  text-align: left;
+}
+
 #ddh-panel .ddh-hint {
   margin-top: 2px;
   font-size: 11px;

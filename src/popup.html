@@ -43,6 +43,20 @@
       </div>
     </section>
 
+    <section class="card">
+      <label class="switch">
+        <input id="anti-idle" type="checkbox" />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="switch-label">Anti-idle (treo máy vẫn tính phút)</span>
+      </label>
+      <div class="slider-row">
+        <label for="anti-idle-interval">Chu kỳ ping</label>
+        <input id="anti-idle-interval" type="range" min="40" max="90" step="5" />
+        <span id="anti-idle-interval-val" class="val">45s</span>
+      </div>
+      <div id="anti-idle-status" class="status">Anti-idle: —</div>
+    </section>
+
     <footer class="ft">
       <div class="kbd"><b>Ctrl+Shift+Enter</b> Điền · <b>Ctrl+Shift+A</b> Auto · <b>Ctrl+Shift+H</b> Ẩn panel</div>
       <a href="https://github.com/luongkun/daily-dictation-helper" target="_blank" rel="noopener">GitHub repo ↗</a>
