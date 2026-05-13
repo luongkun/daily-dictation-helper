@@ -23,6 +23,7 @@ Không cần API key, không cần micro, không cần speech-to-text.
   - `Ctrl+Shift+A` → Bật / tắt Auto
   - `Ctrl+Shift+H` → Thu gọn / mở panel nổi
 - **Panel nổi** ở góc dưới bên phải, có thể kéo, thu gọn hoặc tắt từ popup.
+- **Anti-idle**: giữ cho bộ đếm phút học (“X minutes”) của trang **vẫn tăng khi treo máy**, không cần động vào chuột / bàn phím. Có thể bật/tắt và chỉnh chu kỳ ping (40–90s, mặc định 45s).
 - **Lưu cài đặt** qua `chrome.storage.sync`.
 
 ## Cài đặt (Load unpacked)
@@ -77,6 +78,20 @@ Bài này không có sẵn đáp án trong DOM trước khi bấm Check, nên ex
    - `border-danger` → sai → chuyển sang lựa chọn tiếp theo (trang tự đánh dấu đúng sau khi click).
 4. Khi xuất hiện nút **Next** → click để sang câu tiếp theo, đợi counter `X of Y` chuyển số rồi lặp lại.
 5. Dừng khi đã ở câu cuối và đã bấm Next.
+
+### Anti-idle (treo máy vẫn tính phút)
+
+Trang dailydictation.com **không đếm phút học theo timer chạy nền** — nó chỉ cộng thời gian khi bạn tương tác (bấm Check / Next / Replay / Esc, hoặc audio bắt đầu phát). Cụ thể, các hành động đó dispatch một custom event `focusToInput` trên `window`, và một handler nội bộ của trang sẽ POST `/api/user/update-progress` để cộng thêm ~40 giây vào `time-spent`.
+
+Extension tận dụng đúng cơ chế đó: cứ sau mỗi 45 giây, nó dispatch:
+
+```js
+window.dispatchEvent(new Event("focusToInput"));
+```
+
+→ trang tự POST lên server và cập nhật bộ đếm. Treo máy 1 tiếng = ~60 phút được cộng (áp dụng cho tài khoản đang đăng nhập, có phần tử `#time-spent` trong DOM). Anti-idle sẽ **tạm dừng** khi bạn đang chạy Auto (lúc đó trang đã tự ping rồi, không cần dispatch thêm).
+
+Bật/tắt và chỉnh chu kỳ ngay trong panel nổi hoặc popup. Mặc định **BAT**, chu kỳ 45s.
 
 ## Tự build / dev
 
