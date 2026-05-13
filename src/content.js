@@ -14,15 +14,32 @@
     autoDelayMs: 120,
     autoTypingMs: 0,
     panelMinimized: false,
-    // Anti-idle: dispatch the page's `focusToInput` window event on a timer
-    // so dailydictation.com keeps crediting study minutes even when the user
-    // is AFK. The page debounces /api/user/update-progress to once per ~40s,
-    // so we tick a hair above that.
+    // Anti-idle keeps the page's `time-spent` counter advancing while the
+    // user is AFK. Three modes trade safety for speed:
+    //   safe  — dispatch the page's `focusToInput` event every 45s. The
+    //           page itself debounces to ~40s, so this looks like a real user.
+    //   fast  — POST /api/user/update-progress directly every 15s.
+    //           Bypasses the client debounce; may or may not actually credit
+    //           faster depending on whether the server has its own cap.
+    //   turbo — same direct POST every 5s. Most aggressive; can trip rate
+    //           limits.
     antiIdleEnabled: true,
-    antiIdleIntervalMs: 45000,
+    antiIdleMode: "safe",
     antiIdlePingCount: 0,
     antiIdleLastPingAt: 0,
+    antiIdleLastStatus: 0,
+    antiIdleLastTimeSpent: "",
   };
+
+  const ANTI_IDLE_MODES = {
+    safe:  { intervalMs: 45000, method: "dispatch", label: "An toàn",  warn: false },
+    fast:  { intervalMs: 15000, method: "fetch",    label: "Nhanh",    warn: false },
+    turbo: { intervalMs:  5000, method: "fetch",    label: "Turbo",    warn: true  },
+  };
+
+  function getAntiIdleMode() {
+    return ANTI_IDLE_MODES[STATE.antiIdleMode] || ANTI_IDLE_MODES.safe;
+  }
 
   let _antiIdleTimer = null;
 
@@ -370,28 +387,73 @@
     return !!document.getElementById("time-spent");
   }
 
-  function tickAntiIdle() {
+  async function pingDirect() {
+    // Same endpoint the page itself hits, bypassing the page's 40s client
+    // debounce. Cookies are sent automatically because we're same-origin.
+    let resp;
+    try {
+      resp = await fetch("/api/user/update-progress", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {
+      console.warn("[dd-helper] anti-idle direct fetch failed", e);
+      STATE.antiIdleLastStatus = 0;
+      return;
+    }
+    STATE.antiIdleLastStatus = resp.status;
+    if (resp.status === 403) {
+      toast("Anti-idle: phiên hết hạn (403). Đăng nhập lại?", "error");
+      STATE.antiIdleEnabled = false;
+      saveSettings();
+      stopAntiIdle();
+      return;
+    }
+    if (resp.status === 429) {
+      toast(`Anti-idle: server cap (429), chuyển về An toàn`, "error");
+      STATE.antiIdleMode = "safe";
+      saveSettings();
+      restartAntiIdle();
+      return;
+    }
+    if (resp.status === 200) {
+      try {
+        const data = await resp.json();
+        if (data && typeof data.timeSpentToday !== "undefined") {
+          STATE.antiIdleLastTimeSpent = String(data.timeSpentToday);
+          const dt = document.getElementById("time-spent");
+          if (dt) dt.innerHTML = data.timeSpentToday;
+        }
+      } catch (_e) { /* ignore parse errors */ }
+    }
+  }
+
+  async function tickAntiIdle() {
     if (!STATE.enabled) return;
     if (!STATE.antiIdleEnabled) return;
     // No need to ping during an auto run — the page already fires focusToInput
     // on every Check/Next click.
     if (STATE.autoRunning) return;
     if (!canAntiIdle()) return;
+    const mode = getAntiIdleMode();
     try {
-      window.dispatchEvent(new Event("focusToInput"));
+      if (mode.method === "fetch") {
+        await pingDirect();
+      } else {
+        window.dispatchEvent(new Event("focusToInput"));
+      }
       STATE.antiIdlePingCount += 1;
       STATE.antiIdleLastPingAt = Date.now();
       if (panelEl) updatePanel();
     } catch (e) {
-      // best-effort; nothing actionable
-      console.warn("[dd-helper] anti-idle dispatch failed", e);
+      console.warn("[dd-helper] anti-idle tick failed", e);
     }
   }
 
   function startAntiIdle() {
     stopAntiIdle();
     if (!STATE.enabled || !STATE.antiIdleEnabled) return;
-    const interval = Math.max(20000, STATE.antiIdleIntervalMs | 0);
+    const interval = getAntiIdleMode().intervalMs;
     // Fire one immediately so user sees feedback right away (and credits study
     // time on the first tick).
     setTimeout(tickAntiIdle, 1500);
@@ -449,10 +511,10 @@
           <input type="checkbox" data-role="anti-idle" />
           <span>Anti-idle (treo máy vẫn tính phút)</span>
         </label>
-        <div class="ddh-row ddh-controls">
-          <label class="ddh-label">Chu kỳ ping</label>
-          <input class="ddh-range" type="range" min="40" max="90" step="5" data-role="anti-idle-interval" />
-          <span class="ddh-val" data-role="anti-idle-interval-val">45s</span>
+        <div class="ddh-row ddh-modes" data-role="anti-idle-modes">
+          <button class="ddh-mode-btn" data-mode="safe"  title="45s, qua event — như người thật">An toàn</button>
+          <button class="ddh-mode-btn" data-mode="fast"  title="15s, POST trực tiếp — ~3× nhanh">Nhanh</button>
+          <button class="ddh-mode-btn ddh-mode-warn" data-mode="turbo" title="5s, POST trực tiếp — nhanh nhất, dễ bị cap">Turbo</button>
         </div>
         <div class="ddh-status ddh-status-mini" data-role="anti-idle-status">Anti-idle: —</div>
         <div class="ddh-hint">Phím tắt: <b>Ctrl+Shift+Enter</b> = Điền · <b>Ctrl+Shift+A</b> = Auto · <b>Ctrl+Shift+H</b> = Ẩn panel</div>
@@ -511,16 +573,19 @@
       updatePanel();
     });
 
-    const interval = panelEl.querySelector('[data-role="anti-idle-interval"]');
-    const intervalVal = panelEl.querySelector('[data-role="anti-idle-interval-val"]');
-    interval.value = Math.round(STATE.antiIdleIntervalMs / 1000);
-    intervalVal.textContent = `${interval.value}s`;
-    interval.addEventListener("input", () => {
-      const secs = parseInt(interval.value, 10);
-      STATE.antiIdleIntervalMs = secs * 1000;
-      intervalVal.textContent = `${secs}s`;
+    const modes = panelEl.querySelector('[data-role="anti-idle-modes"]');
+    modes.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      const newMode = btn.dataset.mode;
+      if (!ANTI_IDLE_MODES[newMode]) return;
+      STATE.antiIdleMode = newMode;
+      if (newMode === "turbo") {
+        toast("Turbo bật — có thể bị server cap, cẩn thận", "error");
+      }
       saveSettings();
       restartAntiIdle();
+      updatePanel();
     });
 
     // Drag the panel
@@ -592,9 +657,15 @@
         if (autoBtn.textContent !== newLabel) autoBtn.textContent = newLabel;
         autoBtn.classList.toggle("ddh-running", STATE.autoRunning);
       }
+      // Mode button visual state
+      panelEl.querySelectorAll('[data-role="anti-idle-modes"] button[data-mode]').forEach((b) => {
+        b.classList.toggle("ddh-mode-active", b.dataset.mode === STATE.antiIdleMode);
+      });
+
       const aiStatus = panelEl.querySelector('[data-role="anti-idle-status"]');
       if (aiStatus) {
         const time = readTimeSpent();
+        const mode = getAntiIdleMode();
         let txt;
         if (!canAntiIdle()) {
           txt = "Anti-idle: cần đăng nhập";
@@ -607,7 +678,8 @@
           const last = STATE.antiIdleLastPingAt
             ? `${Math.max(0, Math.round((Date.now() - STATE.antiIdleLastPingAt) / 1000))}s trước`
             : "chưa";
-          txt = `Anti-idle: BẬT · ping ${pings} (${last})${time ? ` · ${time}` : ""}`;
+          const intervalSecs = Math.round(mode.intervalMs / 1000);
+          txt = `${mode.label} (${intervalSecs}s) · ping ${pings} (${last})${time ? ` · ${time}` : ""}`;
         }
         if (aiStatus.textContent !== txt) aiStatus.textContent = txt;
       }
@@ -670,7 +742,7 @@
           autoTypingMs: 0,
           panelMinimized: false,
           antiIdleEnabled: true,
-          antiIdleIntervalMs: 45000,
+          antiIdleMode: "safe",
         },
         (vals) => {
           STATE.enabled = vals.enabled;
@@ -678,7 +750,7 @@
           STATE.autoTypingMs = vals.autoTypingMs;
           STATE.panelMinimized = vals.panelMinimized;
           STATE.antiIdleEnabled = vals.antiIdleEnabled;
-          STATE.antiIdleIntervalMs = vals.antiIdleIntervalMs;
+          STATE.antiIdleMode = ANTI_IDLE_MODES[vals.antiIdleMode] ? vals.antiIdleMode : "safe";
           resolve();
         },
       );
@@ -692,7 +764,7 @@
       autoTypingMs: STATE.autoTypingMs,
       panelMinimized: STATE.panelMinimized,
       antiIdleEnabled: STATE.antiIdleEnabled,
-      antiIdleIntervalMs: STATE.antiIdleIntervalMs,
+      antiIdleMode: STATE.antiIdleMode,
     });
   }
 
@@ -711,8 +783,9 @@
       STATE.antiIdleEnabled = changes.antiIdleEnabled.newValue;
       needsAntiIdleRestart = true;
     }
-    if ("antiIdleIntervalMs" in changes) {
-      STATE.antiIdleIntervalMs = changes.antiIdleIntervalMs.newValue;
+    if ("antiIdleMode" in changes) {
+      const v = changes.antiIdleMode.newValue;
+      STATE.antiIdleMode = ANTI_IDLE_MODES[v] ? v : "safe";
       needsAntiIdleRestart = true;
     }
     if (needsRefresh) {
@@ -743,9 +816,11 @@
           enabled: STATE.enabled,
           antiIdle: {
             enabled: STATE.antiIdleEnabled,
-            intervalMs: STATE.antiIdleIntervalMs,
+            mode: STATE.antiIdleMode,
+            intervalMs: getAntiIdleMode().intervalMs,
             pingCount: STATE.antiIdlePingCount,
             lastPingAt: STATE.antiIdleLastPingAt,
+            lastStatus: STATE.antiIdleLastStatus,
             loggedIn: canAntiIdle(),
             timeSpent: readTimeSpent(),
           },

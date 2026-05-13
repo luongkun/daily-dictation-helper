@@ -197,6 +197,50 @@
   text-align: left;
 }
 
+#ddh-panel .ddh-modes {
+  gap: 4px;
+}
+
+#ddh-panel .ddh-mode-btn {
+  flex: 1;
+  appearance: none;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+#ddh-panel .ddh-mode-btn:hover {
+  background: #eef2f7;
+}
+
+#ddh-panel .ddh-mode-btn.ddh-mode-active {
+  background: #2c6ce8;
+  border-color: #2c6ce8;
+  color: #fff;
+}
+
+#ddh-panel .ddh-mode-btn.ddh-mode-warn.ddh-mode-active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  #ddh-panel .ddh-mode-btn {
+    background: #2a3344;
+    border-color: #2f3a4a;
+    color: #c2cad8;
+  }
+  #ddh-panel .ddh-mode-btn:hover {
+    background: #344056;
+  }
+}
+
 #ddh-panel .ddh-hint {
   margin-top: 2px;
   font-size: 11px;

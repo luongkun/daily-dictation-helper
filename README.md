@@ -23,7 +23,10 @@ Không cần API key, không cần micro, không cần speech-to-text.
   - `Ctrl+Shift+A` → Bật / tắt Auto
   - `Ctrl+Shift+H` → Thu gọn / mở panel nổi
 - **Panel nổi** ở góc dưới bên phải, có thể kéo, thu gọn hoặc tắt từ popup.
-- **Anti-idle**: giữ cho bộ đếm phút học (“X minutes”) của trang **vẫn tăng khi treo máy**, không cần động vào chuột / bàn phím. Có thể bật/tắt và chỉnh chu kỳ ping (40–90s, mặc định 45s).
+- **Anti-idle**: giữ cho bộ đếm phút học (“X minutes”) của trang **vẫn tăng khi treo máy**, không cần động vào chuột / bàn phím. Có **3 mức** chọn từ panel/popup:
+  - **An toàn** (mặc định): 45s/lần, qua event của trang — giống người thật, không có rủi ro.
+  - **Nhanh**: 15s/lần, POST trực tiếp — bỏ qua debounce 40s phía client. Treo 1h có thể được cộng ~3× phút (nếu server không cap).
+  - **Turbo**: 5s/lần, POST trực tiếp — nhanh nhất, dễ bị server cap hoặc flag. Tự rớt về **An toàn** nếu server trả 403/429.
 - **Lưu cài đặt** qua `chrome.storage.sync`.
 
 ## Cài đặt (Load unpacked)
@@ -83,15 +86,15 @@ Bài này không có sẵn đáp án trong DOM trước khi bấm Check, nên ex
 
 Trang dailydictation.com **không đếm phút học theo timer chạy nền** — nó chỉ cộng thời gian khi bạn tương tác (bấm Check / Next / Replay / Esc, hoặc audio bắt đầu phát). Cụ thể, các hành động đó dispatch một custom event `focusToInput` trên `window`, và một handler nội bộ của trang sẽ POST `/api/user/update-progress` để cộng thêm ~40 giây vào `time-spent`.
 
-Extension tận dụng đúng cơ chế đó: cứ sau mỗi 45 giây, nó dispatch:
+Extension hỗ trợ **3 chế độ** ở panel/popup:
 
-```js
-window.dispatchEvent(new Event("focusToInput"));
-```
+| Mức | Chu kỳ | Cơ chế | Nhanh hơn gấp | Rủi ro |
+|---|---|---|---|---|
+| **An toàn** (mặc định) | 45s | `window.dispatchEvent(new Event("focusToInput"))` — y hệt khi bạn bấm Check/Next thật | 1× | Không |
+| **Nhanh** | 15s | `fetch("/api/user/update-progress", {method:"POST"})` trực tiếp, bỏ qua debounce 40s ở client | ~3× | Thấp; nếu server cap thì không nhanh hơn nhưng không bị flag |
+| **Turbo** | 5s | giống Nhanh nhưng tần suất cao hơn | ~8× | Trung bình; nếu server trả 403/429 thì extension **tự rớt về An toàn** và toast cảnh báo |
 
-→ trang tự POST lên server và cập nhật bộ đếm. Treo máy 1 tiếng = ~60 phút được cộng (áp dụng cho tài khoản đang đăng nhập, có phần tử `#time-spent` trong DOM). Anti-idle sẽ **tạm dừng** khi bạn đang chạy Auto (lúc đó trang đã tự ping rồi, không cần dispatch thêm).
-
-Bật/tắt và chỉnh chu kỳ ngay trong panel nổi hoặc popup. Mặc định **BAT**, chu kỳ 45s.
+Anti-idle sẽ **tạm dừng** khi bạn đang chạy Auto (lúc đó trang đã tự ping rồi). Tất cả mode chỉ hoạt động khi đã đăng nhập (có phần tử `#time-spent` trong DOM). Mặc định **BẬT** ở chế độ **An toàn**.
 
 ## Tự build / dev
 
