@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Trợ lí của Lương",
   "short_name": "Trợ lí của Lương",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Tự động điền đáp án bài luyện nghe (Listen & Type) và tự chọn đáp án đúng cho bài Listen & Select trên dailydictation.com. Có chế độ anti-idle giữ cho phút học vẫn cộng khi treo máy.",
   "author": "luongkun",
   "icons": {

@@ -49,10 +49,10 @@
         <span class="track"><span class="thumb"></span></span>
         <span class="switch-label">Anti-idle (treo máy vẫn tính phút)</span>
       </label>
-      <div class="slider-row">
-        <label for="anti-idle-interval">Chu kỳ ping</label>
-        <input id="anti-idle-interval" type="range" min="40" max="90" step="5" />
-        <span id="anti-idle-interval-val" class="val">45s</span>
+      <div id="anti-idle-modes" class="mode-row">
+        <button class="mode-btn" data-mode="safe"  title="45s, qua event — như người thật">An toàn</button>
+        <button class="mode-btn" data-mode="fast"  title="15s, POST trực tiếp — ~3× nhanh">Nhanh</button>
+        <button class="mode-btn mode-warn" data-mode="turbo" title="5s, POST trực tiếp — nhanh nhất, dễ bị cap">Turbo</button>
       </div>
       <div id="anti-idle-status" class="status">Anti-idle: —</div>
     </section>
